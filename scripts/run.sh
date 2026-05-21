@@ -24,10 +24,52 @@ if [ ! -e "/.installed" ]; then
 
     # Add DNS Resolver nameservers to resolv.conf
     printf "nameserver 1.1.1.1\nnameserver 1.0.0.1\n" > /etc/resolv.conf
-    
+
     # Mark as installed.
     touch "/.installed"
 fi
+
+# Show one-time credentials banner on first boot
+show_first_boot_credentials() {
+    if [ ! -f "/.first_boot" ]; then
+        return
+    fi
+
+    if [ ! -f "/root/.vps_credentials" ]; then
+        rm -f "/.first_boot"
+        return
+    fi
+
+    . "/root/.vps_credentials" 2>/dev/null
+    INTERNAL_IP=$(ip route get 1 2>/dev/null | awk '{print $NF;exit}')
+
+    printf "\n${CYAN}╔═══════════════════════════════════════════════════════════════════════════════╗${NC}\n"
+    printf "${CYAN}║${WHITE}${BOLD}                       VPS ROOT CREDENTIALS (save now!)                       ${CYAN}║${NC}\n"
+    printf "${CYAN}╠═══════════════════════════════════════════════════════════════════════════════╣${NC}\n"
+    printf "${CYAN}║${NC}  Host:     ${GREEN}%-66s${CYAN}║${NC}\n" "${INTERNAL_IP:-<server-ip>}"
+    printf "${CYAN}║${NC}  Port:     ${GREEN}%-66s${CYAN}║${NC}\n" "${SSH_PORT:-22}"
+    printf "${CYAN}║${NC}  User:     ${GREEN}%-66s${CYAN}║${NC}\n" "$USER"
+    printf "${CYAN}║${NC}  Password: ${GREEN}%-66s${CYAN}║${NC}\n" "$PASSWORD"
+    printf "${CYAN}╠═══════════════════════════════════════════════════════════════════════════════╣${NC}\n"
+    printf "${CYAN}║${YELLOW}  Shown ONLY ONCE. Also stored in /root/.vps_credentials                       ${CYAN}║${NC}\n"
+    printf "${CYAN}╚═══════════════════════════════════════════════════════════════════════════════╝${NC}\n\n"
+
+    rm -f "/.first_boot"
+}
+
+# Auto-start bundled SSH server if config exists
+start_ssh_server() {
+    if [ ! -x "/usr/local/bin/ssh" ] || [ ! -f "/ssh_config.yml" ]; then
+        return
+    fi
+    if pgrep -f "/usr/local/bin/ssh" > /dev/null 2>&1; then
+        return
+    fi
+    /usr/local/bin/ssh > /var/log/ssh.log 2>&1 &
+}
+
+show_first_boot_credentials
+start_ssh_server
 
 # Check if the autorun script exists
 if [ ! -e "/autorun.sh" ]; then
