@@ -10,9 +10,7 @@
     "description": "A lightweight Debian 13 VPS egg for Pterodactyl Panel with auto-generated root credentials.",
     "features": null,
     "docker_images": {
-        "Quay.io": "quay.io\/ydrag0n\/pterodactyl-vps-egg:latest",
-        "Docker Hub": "ysdragon\/pterodactyl-vps-egg:latest",
-        "GitHub Container Registry": "ghcr.io\/ysdragon\/pterodactyl-vps-egg:latest"
+        "GitHub Container Registry": "ghcr.io\/tinybrickboy\/pterodactyl-vps-egg:latest"
     },
     "file_denylist": [],
     "startup": ".\/run.sh",
@@ -25,7 +23,7 @@
     "scripts": {
         "installation": {
             "script": "#!\/bin\/bash\r\n\r\ncd \/mnt\/server\/",
-            "container": "quay.io\/ydrag0n\/pterodactyl-vps-egg",
+            "container": "ghcr.io\/tinybrickboy\/pterodactyl-vps-egg:latest",
             "entrypoint": "bash"
         }
     },
