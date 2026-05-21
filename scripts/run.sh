@@ -29,6 +29,34 @@ if [ ! -e "/.installed" ]; then
     touch "/.installed"
 fi
 
+# Read the Pterodactyl-allocated IP/port from /vps.config (populated by
+# the panel via the egg's file parser) and apply it to /ssh_config.yml so
+# the bundled SSH server listens on the port that is actually exposed.
+sync_ssh_port_from_pterodactyl() {
+    PTERO_PORT=""
+    PTERO_IP=""
+    if [ -f "/vps.config" ]; then
+        PTERO_PORT=$(grep -E '^[[:space:]]*port[[:space:]]*=' /vps.config | head -n1 | cut -d'=' -f2- | tr -d '[:space:]')
+        PTERO_IP=$(grep -E '^[[:space:]]*internalip[[:space:]]*=' /vps.config | head -n1 | cut -d'=' -f2- | tr -d '[:space:]')
+    fi
+
+    case "$PTERO_PORT" in
+        ''|*[!0-9]*) PTERO_PORT="" ;;
+    esac
+
+    if [ -n "$PTERO_PORT" ] && [ -f "/ssh_config.yml" ]; then
+        sed -i "s/^\([[:space:]]*port:[[:space:]]*\).*/\1\"$PTERO_PORT\"/" /ssh_config.yml
+
+        if [ -f "/root/.vps_credentials" ]; then
+            if grep -q '^SSH_PORT=' /root/.vps_credentials; then
+                sed -i "s/^SSH_PORT=.*/SSH_PORT=$PTERO_PORT/" /root/.vps_credentials
+            else
+                printf "SSH_PORT=%s\n" "$PTERO_PORT" >> /root/.vps_credentials
+            fi
+        fi
+    fi
+}
+
 # Show one-time credentials banner on first boot
 show_first_boot_credentials() {
     if [ ! -f "/.first_boot" ]; then
@@ -41,12 +69,12 @@ show_first_boot_credentials() {
     fi
 
     . "/root/.vps_credentials" 2>/dev/null
-    INTERNAL_IP=$(ip route get 1 2>/dev/null | awk '{print $NF;exit}')
+    HOST_DISPLAY="${PTERO_IP:-$(ip route get 1 2>/dev/null | awk '{print $NF;exit}')}"
 
     printf "\n${CYAN}╔═══════════════════════════════════════════════════════════════════════════════╗${NC}\n"
     printf "${CYAN}║${WHITE}${BOLD}                       VPS ROOT CREDENTIALS (save now!)                       ${CYAN}║${NC}\n"
     printf "${CYAN}╠═══════════════════════════════════════════════════════════════════════════════╣${NC}\n"
-    printf "${CYAN}║${NC}  Host:     ${GREEN}%-66s${CYAN}║${NC}\n" "${INTERNAL_IP:-<server-ip>}"
+    printf "${CYAN}║${NC}  Host:     ${GREEN}%-66s${CYAN}║${NC}\n" "${HOST_DISPLAY:-<server-ip>}"
     printf "${CYAN}║${NC}  Port:     ${GREEN}%-66s${CYAN}║${NC}\n" "${SSH_PORT:-22}"
     printf "${CYAN}║${NC}  User:     ${GREEN}%-66s${CYAN}║${NC}\n" "$USER"
     printf "${CYAN}║${NC}  Password: ${GREEN}%-66s${CYAN}║${NC}\n" "$PASSWORD"
@@ -68,6 +96,7 @@ start_ssh_server() {
     /usr/local/bin/ssh > /var/log/ssh.log 2>&1 &
 }
 
+sync_ssh_port_from_pterodactyl
 show_first_boot_credentials
 start_ssh_server
 
