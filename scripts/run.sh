@@ -109,7 +109,9 @@ start_ssh_server() {
 
     mkdir -p /var/log 2>/dev/null
     : > /var/log/ssh.log 2>/dev/null
-    /usr/local/bin/ssh > /var/log/ssh.log 2>&1 &
+    # ysdragon/ssh is an interactive binary that exits on stdin EOF ("Type 'q' to exit.").
+    # Feed it a stdin that never closes so it stays alive in the background.
+    tail -f /dev/null | /usr/local/bin/ssh > /var/log/ssh.log 2>&1 &
     SSH_PID=$!
 
     # Give the server a moment to bind, then verify it survived.
