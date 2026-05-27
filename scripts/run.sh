@@ -87,18 +87,56 @@ show_first_boot_credentials() {
 
 # Auto-start bundled SSH server if config exists
 start_ssh_server() {
-    if [ ! -x "/usr/local/bin/ssh" ] || [ ! -f "/ssh_config.yml" ]; then
-        return
+    if [ ! -x "/usr/local/bin/ssh" ]; then
+        log "ERROR" "SSH binary missing at /usr/local/bin/ssh. Run 'install-ssh'." "$RED"
+        return 1
+    fi
+    if [ ! -f "/ssh_config.yml" ]; then
+        log "ERROR" "/ssh_config.yml missing. SSH server will not start." "$RED"
+        return 1
     fi
     if pgrep -f "/usr/local/bin/ssh" > /dev/null 2>&1; then
-        return
+        return 0
     fi
+
+    CONFIGURED_PORT=$(grep -E '^[[:space:]]*port:' /ssh_config.yml | head -n1 | sed 's/.*: *"\?\([^"]*\)"\?/\1/' | tr -d '[:space:]')
+    if [ "$CONFIGURED_PORT" = "22" ] && [ ! -f "/vps.config" ]; then
+        log "ERROR" "/vps.config not found and ssh_config.yml still on port 22." "$RED"
+        log "ERROR" "Pterodactyl did not populate the allocated port; SSH cannot bind 22 as an unprivileged user." "$RED"
+        log "INFO"  "Restart the server once the allocation is attached, or edit /ssh_config.yml manually." "$YELLOW"
+        return 1
+    fi
+
+    mkdir -p /var/log 2>/dev/null
+    : > /var/log/ssh.log 2>/dev/null
     /usr/local/bin/ssh > /var/log/ssh.log 2>&1 &
+    SSH_PID=$!
+
+    # Give the server a moment to bind, then verify it survived.
+    i=0
+    while [ $i -lt 10 ]; do
+        if ! kill -0 "$SSH_PID" 2>/dev/null; then
+            break
+        fi
+        if (netstat -tln 2>/dev/null || ss -tln 2>/dev/null) | grep -q ":${CONFIGURED_PORT} "; then
+            log "SUCCESS" "SSH listening on port ${CONFIGURED_PORT}." "$GREEN"
+            return 0
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+
+    if kill -0 "$SSH_PID" 2>/dev/null; then
+        log "WARNING" "SSH process is running but not detected on port ${CONFIGURED_PORT} yet. See /var/log/ssh.log." "$YELLOW"
+        return 0
+    fi
+
+    log "ERROR" "SSH server exited immediately. Last log lines:" "$RED"
+    tail -n 20 /var/log/ssh.log 2>/dev/null
+    return 1
 }
 
 sync_ssh_port_from_pterodactyl
-show_first_boot_credentials
-start_ssh_server
 
 # Check if the autorun script exists
 if [ ! -e "/autorun.sh" ]; then
@@ -128,10 +166,6 @@ get_formatted_dir() {
             printf "$current_dir"
         ;;
     esac
-}
-
-print_instructions() {
-    log "INFO" "Type 'help' to view a list of available custom commands." "$YELLOW"
 }
 
 # Function to print prompt
@@ -671,16 +705,6 @@ restore_backup() {
     fi
 }
 
-# Function to print initial banner
-print_banner() {
-    print_main_banner
-}
-
-# Function to print a beautiful help message
-print_help_message() {
-    print_help_banner
-}
-
 # Function to handle command execution
 execute_command() {
     cmd="$1"
@@ -786,11 +810,6 @@ execute_command() {
             print_prompt "$user"
             return 0
         ;;
-        "help")
-            print_help_message
-            print_prompt "$user"
-            return 0
-        ;;
         *)
             eval "$cmd"
             print_prompt "$user"
@@ -814,11 +833,8 @@ touch "$HISTORY_FILE"
 # Set up trap for clean exit
 trap cleanup INT TERM
 
-# Print the initial banner
-print_banner
-
-# Print the initial instructions
-print_instructions
+show_first_boot_credentials
+start_ssh_server
 
 # Print initial command
 printf "${GREEN}root@${HOSTNAME}${NC}:${RED}$(get_formatted_dir)${NC}#\n"
