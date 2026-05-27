@@ -183,6 +183,17 @@ if [ -f "/vnc_install.sh" ]; then
     chmod +x "$ROOTFS_DIR/vnc_install.sh"
 fi
 
+# Install systemctl shim so that `systemctl start/stop/status ...` works inside
+# the PRoot environment.  The real systemctl cannot operate because systemd is
+# not PID 1; this shim translates the most common commands to SysV init.d or
+# the `service` helper.  Placed in /usr/local/bin so it shadows /usr/bin/systemctl.
+if [ -f "/systemctl-shim.sh" ]; then
+    mkdir -p "$ROOTFS_DIR/usr/local/bin"
+    cp /systemctl-shim.sh "$ROOTFS_DIR/usr/local/bin/systemctl"
+    chmod +x "$ROOTFS_DIR/usr/local/bin/systemctl"
+    log "SUCCESS" "systemctl shim installed." "$GREEN"
+fi
+
 print_credentials_banner
 
 # Marker so run.sh can show the one-time notice too

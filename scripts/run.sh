@@ -3,6 +3,15 @@
 # Source common functions and variables
 . /common.sh
 
+# Ensure the systemctl shim is present so `systemctl` works inside PRoot.
+# This handles both fresh installs and existing rootfs containers that
+# pre-date the shim.
+if [ ! -x "/usr/local/bin/systemctl" ] && [ -f "/systemctl-shim.sh" ]; then
+    mkdir -p /usr/local/bin
+    cp /systemctl-shim.sh /usr/local/bin/systemctl
+    chmod +x /usr/local/bin/systemctl
+fi
+
 # Configuration
 HOSTNAME="MyVPS"
 HISTORY_FILE="${HOME}/.custom_shell_history"
