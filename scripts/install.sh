@@ -90,6 +90,52 @@ EOF
     chmod 600 "$ROOTFS_DIR/root/.vps_credentials"
 }
 
+setup_shell_prompt() {
+    log "INFO" "Configuring shell prompt to show working directory..." "$YELLOW"
+
+    mkdir -p "$ROOTFS_DIR/root" "$ROOTFS_DIR/etc/profile.d"
+
+    cat > "$ROOTFS_DIR/etc/profile.d/vps-prompt.sh" <<'EOF'
+# Default prompt for VPS SSH sessions: show user@host:full-path#
+if [ -n "$BASH_VERSION" ]; then
+    PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+else
+    PS1='$(whoami)@$(hostname):$(pwd)$ '
+fi
+export PS1
+EOF
+    chmod 644 "$ROOTFS_DIR/etc/profile.d/vps-prompt.sh"
+
+    cat > "$ROOTFS_DIR/root/.bashrc" <<'EOF'
+# ~/.bashrc for VPS root user
+[ -z "$PS1" ] && return
+
+HISTCONTROL=ignoreboth
+HISTSIZE=1000
+HISTFILESIZE=2000
+shopt -s histappend
+shopt -s checkwinsize
+
+PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias ls='ls --color=auto' 2>/dev/null || true
+EOF
+    chmod 644 "$ROOTFS_DIR/root/.bashrc"
+
+    if [ ! -f "$ROOTFS_DIR/root/.profile" ]; then
+        cat > "$ROOTFS_DIR/root/.profile" <<'EOF'
+# ~/.profile for VPS root user
+if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+EOF
+        chmod 644 "$ROOTFS_DIR/root/.profile"
+    fi
+}
+
 install_ssh_binary() {
     log "INFO" "Installing SSH server binary..." "$YELLOW"
     ssh_url="https://github.com/ysdragon/ssh/releases/latest/download/ssh-$ARCH_ALT"
@@ -125,6 +171,7 @@ log "INFO" "Installing $PRETTY_NAME for $ARCH_ALT..." "$GREEN"
 
 download_and_extract_rootfs
 setup_credentials
+setup_shell_prompt
 install_ssh_binary
 
 # Copy run.sh, common.sh, and vnc_install.sh to ROOTFS_DIR and make them executable

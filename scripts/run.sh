@@ -85,6 +85,55 @@ show_first_boot_credentials() {
     rm -f "/.first_boot"
 }
 
+# Ensure SSH login sessions have a prompt that shows the current path.
+# Idempotent so existing installs get the prompt without needing reinstall.
+ensure_shell_prompt() {
+    if [ ! -f "/etc/profile.d/vps-prompt.sh" ]; then
+        mkdir -p /etc/profile.d 2>/dev/null
+        cat > /etc/profile.d/vps-prompt.sh <<'EOF'
+# Default prompt for VPS SSH sessions: show user@host:full-path#
+if [ -n "$BASH_VERSION" ]; then
+    PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+else
+    PS1='$(whoami)@$(hostname):$(pwd)$ '
+fi
+export PS1
+EOF
+        chmod 644 /etc/profile.d/vps-prompt.sh 2>/dev/null
+    fi
+
+    if [ ! -f "/root/.bashrc" ] || ! grep -q '\\w' /root/.bashrc 2>/dev/null; then
+        cat > /root/.bashrc <<'EOF'
+# ~/.bashrc for VPS root user
+[ -z "$PS1" ] && return
+
+HISTCONTROL=ignoreboth
+HISTSIZE=1000
+HISTFILESIZE=2000
+shopt -s histappend
+shopt -s checkwinsize
+
+PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias ls='ls --color=auto' 2>/dev/null || true
+EOF
+        chmod 644 /root/.bashrc 2>/dev/null
+    fi
+
+    if [ ! -f "/root/.profile" ]; then
+        cat > /root/.profile <<'EOF'
+# ~/.profile for VPS root user
+if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+EOF
+        chmod 644 /root/.profile 2>/dev/null
+    fi
+}
+
 # Auto-start bundled SSH server if config exists
 start_ssh_server() {
     if [ ! -x "/usr/local/bin/ssh" ]; then
@@ -835,6 +884,7 @@ touch "$HISTORY_FILE"
 # Set up trap for clean exit
 trap cleanup INT TERM
 
+ensure_shell_prompt
 show_first_boot_credentials
 start_ssh_server
 
